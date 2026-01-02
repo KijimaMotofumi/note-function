@@ -106,6 +106,13 @@ function ensureEndsWithNewline(s) {
     return s.endsWith('\n') ? s : `${s}\n`;
 }
 
+function parseNumberEnv(name, defaultValue) {
+    const raw = process.env[name];
+    if (raw === undefined || raw === null || raw === '') return defaultValue;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : defaultValue;
+}
+
 app.http('note-push', {
     methods: ['GET', 'POST'],
     authLevel: 'anonymous',
@@ -151,18 +158,24 @@ app.http('note-push', {
         const branch = process.env.GITHUB_BRANCH || 'main';
         const template = process.env.NOTE_FILE_PATH_TEMPLATE || 'daily/{date}.md';
 
-        const t = formatTokyoParts();
-        const path = buildNotePath(template, t);
+        // Day cutoff: treat 00:00〜(cutoff) as "previous day" for note file path/date.
+        // Example: NOTE_DAY_CUTOFF_HOURS=4 => day changes at 28:00 (04:00).
+        const cutoffHours = parseNumberEnv('NOTE_DAY_CUTOFF_HOURS', 4);
+        const cutoffMs = cutoffHours * 60 * 60 * 1000;
+
+        const tNow = formatTokyoParts(); // display time (actual time)
+        const tNote = formatTokyoParts(new Date(Date.now() - cutoffMs)); // note date/path decision
+        const path = buildNotePath(template, tNote);
 
         const lines = textMessages.map((m) => {
             // Minimal, grep-friendly format
             // Example: - 14:03 message text
-            const time = `${t.HH}:${t.MM}`;
+            const time = `${tNow.HH}:${tNow.MM}`;
             return `- ${time} ${m.text.replaceAll('\r\n', '\n').replaceAll('\r', '\n')}`;
         });
 
         const entry = `${lines.join('\n')}\n`;
-        const commitMsg = `note: append from LINE (${t.date})`;
+        const commitMsg = `note: append from LINE (${tNote.date})`;
 
         // Retry on SHA conflicts (race conditions when multiple messages arrive)
         let lastErr;
@@ -171,7 +184,7 @@ app.http('note-push', {
                 const cur = await getGitHubFile({ owner, repo, path, branch, token: ghToken });
                 let nextContent;
                 if (!cur.exists) {
-                    nextContent = `# ${t.date}\n\n${entry}`;
+                    nextContent = `# ${tNote.date}\n\n${entry}`;
                 } else {
                     nextContent = ensureEndsWithNewline(cur.content) + entry;
                 }

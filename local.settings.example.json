@@ -11,7 +11,8 @@
     "GITHUB_REPO": "note",
     "GITHUB_BRANCH": "main",
 
-    "NOTE_FILE_PATH_TEMPLATE": "{yy}/{mm}/{dd}.md"
+    "NOTE_FILE_PATH_TEMPLATE": "{yy}/{mm}/{dd}.md",
+    "NOTE_DAY_CUTOFF_HOURS": "4"
   }
 }
 

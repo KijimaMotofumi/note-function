@@ -12,6 +12,8 @@ Function App の「構成」(Application settings) か `local.settings.json` に
 - **`GITHUB_OWNER`**: 省略時 `KijimaMotofumi`
 - **`GITHUB_REPO`**: 省略時 `note`
 - **`GITHUB_BRANCH`**: 省略時 `main`
+- **`NOTE_DAY_CUTOFF_HOURS`**: 日付の切り替え時刻（時間）。省略時 `4`
+  - 例: `4` の場合、**28:00(=翌4:00)** で日付が切り替わる（0:00〜3:59は前日扱い）
 - **`NOTE_FILE_PATH_TEMPLATE`**: 追記先パスのテンプレート（省略時 `daily/{date}.md`）
   - 置換: `{yyyy}` `{yy}` `{mm}` `{dd}` `{date}`（例 `{date}` → `2026-01-02`）
 
