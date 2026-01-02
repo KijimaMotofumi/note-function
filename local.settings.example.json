@@ -1,0 +1,18 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+
+    "LINE_CHANNEL_SECRET": "YOUR_LINE_CHANNEL_SECRET",
+
+    "GITHUB_TOKEN": "YOUR_GITHUB_TOKEN",
+    "GITHUB_OWNER": "KijimaMotofumi",
+    "GITHUB_REPO": "note",
+    "GITHUB_BRANCH": "main",
+
+    "NOTE_FILE_PATH_TEMPLATE": "{yy}/{mm}/{dd}.md"
+  }
+}
+
+
