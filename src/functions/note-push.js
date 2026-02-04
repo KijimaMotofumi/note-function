@@ -33,12 +33,15 @@ function formatTokyoParts(date = new Date()) {
 
 function buildNotePath(template, tokyoParts) {
     // Supported placeholders: {yyyy} {yy} {mm} {dd} {date}
-    return template
+    let path = template
         .replaceAll('{yyyy}', tokyoParts.yyyy)
         .replaceAll('{yy}', tokyoParts.yy)
         .replaceAll('{mm}', tokyoParts.mm)
         .replaceAll('{dd}', tokyoParts.dd)
         .replaceAll('{date}', tokyoParts.date);
+    // Normalize: remove leading/trailing slashes
+    path = path.replace(/^\/+/, '').replace(/\/+$/, '');
+    return path;
 }
 
 function verifyLineSignature(rawBody, signatureHeader, channelSecret) {
@@ -104,6 +107,57 @@ async function putGitHubFile({ owner, repo, path, branch, token, content, sha, m
 function ensureEndsWithNewline(s) {
     if (!s) return '\n';
     return s.endsWith('\n') ? s : `${s}\n`;
+}
+
+async function ensureParentDirectories({ owner, repo, path, branch, token, context }) {
+    // Create all parent directories recursively (e.g., 26/ then 26/02/)
+    const parts = path.split('/');
+    if (parts.length <= 1) return; // No parent directory
+    
+    // Build parent paths: ["26", "26/02"] for "26/02/01.md"
+    const parentPaths = [];
+    for (let i = 1; i < parts.length; i++) {
+        parentPaths.push(parts.slice(0, i).join('/'));
+    }
+    
+    for (const dirPath of parentPaths) {
+        const gitkeepPath = `${dirPath}/.gitkeep`;
+        try {
+            // Check if already exists
+            const check = await getGitHubFile({ owner, repo, path: gitkeepPath, branch, token });
+            if (check.exists) continue;
+            
+            // Create .gitkeep
+            await putGitHubFile({
+                owner,
+                repo,
+                path: gitkeepPath,
+                branch,
+                token,
+                content: '',
+                sha: undefined,
+                message: `Create directory: ${dirPath}`,
+            });
+            context.log(`Created directory: ${dirPath}`);
+        } catch (e) {
+            // Try to create anyway, might succeed even if check failed
+            try {
+                await putGitHubFile({
+                    owner,
+                    repo,
+                    path: gitkeepPath,
+                    branch,
+                    token,
+                    content: '',
+                    sha: undefined,
+                    message: `Create directory: ${dirPath}`,
+                });
+                context.log(`Created directory (on retry): ${dirPath}`);
+            } catch (retryErr) {
+                context.log(`Could not create ${dirPath}:`, retryErr?.message || retryErr);
+            }
+        }
+    }
 }
 
 function parseNumberEnv(name, defaultValue) {
@@ -179,6 +233,7 @@ app.http('note-push', {
 
         // Retry on SHA conflicts (race conditions when multiple messages arrive)
         let lastErr;
+        let parentDirsCreated = false;
         for (let attempt = 1; attempt <= 3; attempt++) {
             try {
                 const cur = await getGitHubFile({ owner, repo, path, branch, token: ghToken });
@@ -202,8 +257,24 @@ app.http('note-push', {
                 return { status: 200, jsonBody: { ok: true, appended: textMessages.length, path } };
             } catch (e) {
                 lastErr = e;
-                // Common conflict code: 409
                 const msg = String(e?.message || e);
+                
+                // If 404/422 and parent dirs might not exist, create them recursively
+                const isNotFoundOrUnprocessable = msg.includes('(404)') || msg.includes('(422)') || msg.includes('404') || msg.includes('422');
+                if (!parentDirsCreated && isNotFoundOrUnprocessable && path.includes('/')) {
+                    try {
+                        context.log(`Creating parent directories for: ${path}`);
+                        await ensureParentDirectories({ owner, repo, path, branch, token: ghToken, context });
+                        parentDirsCreated = true;
+                        // Retry the original operation
+                        continue;
+                    } catch (dirErr) {
+                        // If parent dir creation failed, log and proceed with original error
+                        context.log('Failed to create parent directories:', dirErr?.message || dirErr);
+                    }
+                }
+                
+                // Common conflict code: 409
                 const isConflict = msg.includes('(409)') || msg.includes('409');
                 if (!isConflict || attempt === 3) break;
                 await new Promise((r) => setTimeout(r, 150 * attempt));
