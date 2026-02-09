@@ -27,6 +27,7 @@ Function App の「構成」(Application settings) か `local.settings.json` に
 
 LINE Developers の Webhook URL に、この Function の URL を設定してください。
 
+
 - `POST /api/note-push`
 
 ## 追記フォーマット
